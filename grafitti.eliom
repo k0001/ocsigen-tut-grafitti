@@ -22,6 +22,13 @@ let canvas_elt =
   canvas ~a:[a_width width; a_height height]
     [pcdata "your browser doesn't support canvas"]
 
+{shared{
+  type messages = (string * int * (int * int) * (int * int))
+    deriving (Json)
+}}
+
+let bus = Eliom_bus.create Json.t<messages>
+
 {client{
   let draw ctx (color, size, (x1, y1), (x2, y2)) =
     ctx##strokeStyle <- (Js.string color);
@@ -32,7 +39,6 @@ let canvas_elt =
     ctx##stroke()
 
   let init_client () =
-
     let canvas = Eliom_content.Html5.To_dom.of_canvas %canvas_elt in
     let ctx = canvas##getContext (Dom_html._2d_) in
     ctx##lineCap <- Js.string "round";
@@ -50,7 +56,11 @@ let canvas_elt =
       ("#ff9933", 5, (oldx, oldy), (!x, !y))
     in
 
-    let line ev = draw ctx (compute_line ev); Lwt.return () in
+    let line ev =
+      let v = compute_line ev in
+      let _ = Eliom_bus.write %bus v in
+        draw ctx v;
+        Lwt.return () in
 
     Lwt.async
       (fun () ->
@@ -59,8 +69,11 @@ let canvas_elt =
           (fun ev _ ->
             set_coord ev; line ev >>= fun () ->
             Lwt.pick [mousemoves Dom_html.document (fun x _ -> line x);
-                      mouseup Dom_html.document >>= line]))
+                      mouseup Dom_html.document >>= line]));
+
+   Lwt.async (fun () -> Lwt_stream.iter (draw ctx) (Eliom_bus.stream %bus))
 }}
+
 
 let page =
   (html
