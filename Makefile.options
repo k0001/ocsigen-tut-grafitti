@@ -12,7 +12,7 @@ CLIENT_FILES := $(wildcard *.eliomi *.eliom)
 # OCamlfind packages for the server
 SERVER_PACKAGES :=
 # OCamlfind packages for the client
-CLIENT_PACKAGES :=
+CLIENT_PACKAGES := oclosure
 
 # Directory with files to be statically served
 LOCAL_STATIC = static
@@ -22,7 +22,7 @@ PERSISTENT_DATA_BACKEND = dbm
 
 # Debug application (yes/no): Debugging info in compilation,
 # JavaScript, ocsigenserver
-DEBUG := yes
+DEBUG := no
 
 # User to run server with (make run.*)
 WWWUSER := www-data

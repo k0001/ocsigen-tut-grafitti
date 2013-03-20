@@ -38,32 +38,48 @@ let bus = Eliom_bus.create Json.t<messages>
     ctx##lineTo(float x2, float y2);
     ctx##stroke()
 
-  let init_client () =
-    let canvas = Eliom_content.Html5.To_dom.of_canvas %canvas_elt in
-    let ctx = canvas##getContext (Dom_html._2d_) in
-    ctx##lineCap <- Js.string "round";
+       let init_client () =
+         let canvas = Eliom_content.Html5.To_dom.of_canvas %canvas_elt in
+         let ctx = canvas##getContext (Dom_html._2d_) in
+         ctx##lineCap <- Js.string "round";
 
-    let x = ref 0 and y = ref 0 in
+         (* Size of the brush *)
+         let slider = jsnew Goog.Ui.slider(Js.null) in
+         slider##setMinimum(1.);
+         slider##setMaximum(80.);
+         slider##setValue(10.);
+         slider##setMoveToPointEnabled(Js._true);
+         slider##render(Js.some Dom_html.document##body);
+         (* The color palette: *)
+         let pSmall =
+           jsnew Goog.Ui.hsvPalette(Js.null, Js.null,
+                                    Js.some (Js.string "goog-hsv-palette-sm"))
+         in
+         pSmall##render(Js.some Dom_html.document##body);
 
-    let set_coord ev =
-      let x0, y0 = Dom_html.elementClientPosition canvas in
-      x := ev##clientX - x0; y := ev##clientY - y0
-    in
+         let x = ref 0 and y = ref 0 in
 
-    let compute_line ev =
-      let oldx = !x and oldy = !y in
-      set_coord ev;
-      ("#ff9933", 5, (oldx, oldy), (!x, !y))
-    in
+         let set_coord ev =
+           let x0, y0 = Dom_html.elementClientPosition canvas in
+           x := ev##clientX - x0; y := ev##clientY - y0
+         in
 
-    let line ev =
-      let v = compute_line ev in
-      let _ = Eliom_bus.write %bus v in
-        draw ctx v;
-        Lwt.return () in
+         let compute_line ev =
+           let oldx = !x and oldy = !y in
+           set_coord ev;
+           let color = Js.to_string (pSmall##getColor()) in
+           let size = int_of_float (Js.to_float (slider##getValue())) in
+           (color, size, (oldx, oldy), (!x, !y))
+         in
 
-    Lwt.async
-      (fun () ->
+         let line ev =
+           let v = compute_line ev in
+           let _ = Eliom_bus.write %bus v in
+           draw ctx v;
+           Lwt.return () in
+
+         Lwt.async
+           (fun () ->
         let open Lwt_js_events in
         mousedowns canvas
           (fun ev _ ->
@@ -76,10 +92,17 @@ let bus = Eliom_bus.create Json.t<messages>
 
 
 let page =
-  (html
-     (head (title (pcdata "Graffiti")) [])
-     (body [h1 [pcdata "Graffiti"];
-            canvas_elt] ) )
+  html
+    (Eliom_tools.F.head ~title:"Grafitti"
+       ~css:[
+         ["css";"common.css"];
+         ["css";"hsvpalette.css"];
+         ["css";"slider.css"];
+         ["css";"grafitti.css"];
+         ["grafitti_oclosure.js"];
+       ]
+       ~js:[ ["grafitti_oclosure.js"] ] ())
+    (body [h1 [pcdata "Grafitti"]; canvas_elt])
 
 let main_service =
   Grafitti_app.register_service ~path:[""] ~get_params:Eliom_parameter.unit
