@@ -10,7 +10,7 @@ SERVER_FILES := $(wildcard *.eliomi *.eliom)
 CLIENT_FILES := $(wildcard *.eliomi *.eliom)
 
 # OCamlfind packages for the server
-SERVER_PACKAGES :=
+SERVER_PACKAGES := cairo
 # OCamlfind packages for the client
 CLIENT_PACKAGES := oclosure
 

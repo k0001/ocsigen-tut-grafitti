@@ -27,7 +27,43 @@ let canvas_elt =
     deriving (Json)
 }}
 
+let rgb_from_string color = (* color is in format #rrggbb *)
+  let get_color i =
+    float_of_string ("0x"^(String.sub color (1+2*i) 2)) /. 255. in
+  try get_color 0, get_color 1, get_color 2 with | _ -> 0., 0., 0.
+
+let draw_server, image_string =
+  let surface =
+    Cairo.image_surface_create Cairo.FORMAT_ARGB32 ~width ~height in
+  let ctx = Cairo.create surface in
+  ((fun ((color : string), size, (x1, y1), (x2, y2)) ->
+    Cairo.set_line_width ctx (float size) ;
+    Cairo.set_line_join ctx Cairo.LINE_JOIN_ROUND ;
+    Cairo.set_line_cap ctx Cairo.LINE_CAP_ROUND ;
+    let red, green, blue = rgb_from_string color in
+    Cairo.set_source_rgb ctx ~red ~green ~blue ;
+    Cairo.move_to ctx (float x1) (float x2) ;
+    Cairo.line_to ctx (float x1) (float x2) ;
+    Cairo.close_path ctx ;
+    Cairo.stroke ctx ;
+   ),
+   (fun () ->
+     let b = Buffer.create 10000 in
+     (* Output a PNG in a string *)
+     Cairo_png.surface_write_to_stream surface (Buffer.add_string b);
+     Buffer.contents b
+   ))
+
 let bus = Eliom_bus.create Json.t<messages>
+
+let _ = Lwt_stream.iter draw_server (Eliom_bus.stream bus)
+
+let imageservice =
+  Eliom_registration.String.register_service
+    ~path:["image"]
+    ~get_params:Eliom_parameter.unit
+    (fun () () -> Lwt.return (image_string (), "image/png"))
+
 
 {client{
   let draw ctx (color, size, (x1, y1), (x2, y2)) =
@@ -42,6 +78,12 @@ let bus = Eliom_bus.create Json.t<messages>
          let canvas = Eliom_content.Html5.To_dom.of_canvas %canvas_elt in
          let ctx = canvas##getContext (Dom_html._2d_) in
          ctx##lineCap <- Js.string "round";
+
+         (* The initial image: *)
+         let img = Eliom_content.Html5.To_dom.of_img
+           (img ~alt:"canvas" ~src:(make_uri ~service:%imageservice ()) ()) in
+         img##onload <- Dom_html.handler
+           (fun ev -> ctx##drawImage(img, 0., 0.); Js._false);
 
          (* Size of the brush *)
          let slider = jsnew Goog.Ui.slider(Js.null) in
@@ -89,6 +131,8 @@ let bus = Eliom_bus.create Json.t<messages>
 
    Lwt.async (fun () -> Lwt_stream.iter (draw ctx) (Eliom_bus.stream %bus))
 }}
+
+
 
 
 let page =
