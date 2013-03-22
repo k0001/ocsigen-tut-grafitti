@@ -75,61 +75,78 @@ let _ = Lwt_stream.iter draw_server (Eliom_bus.stream bus)
     ctx##lineTo(float x2, float y2);
     ctx##stroke()
 
-  let init_client () =
-    let canvas = Eliom_content.Html5.To_dom.of_canvas %canvas_elt in
-    let ctx = canvas##getContext (Dom_html._2d_) in
-    ctx##lineCap <- Js.string "round";
+       let init_client () =
+         let canvas = Eliom_content.Html5.To_dom.of_canvas %canvas_elt in
+         let ctx = canvas##getContext (Dom_html._2d_) in
+         ctx##lineCap <- Js.string "round";
 
-    (* The initial image: *)
-    let img = Eliom_content.Html5.To_dom.of_img
-      (img ~alt:"canvas" ~src:(make_uri ~service:%imageservice ()) ()) in
-    img##onload <- Dom_html.handler
-      (fun ev -> ctx##drawImage(img, 0., 0.); Js._false);
+         (* The initial image: *)
+         let img = Eliom_content.Html5.To_dom.of_img
+           (img ~alt:"canvas" ~src:(make_uri ~service:%imageservice ()) ()) in
+         img##onload <- Dom_html.handler
+           (fun ev -> ctx##drawImage(img, 0., 0.); Js._false);
 
-    (* Size of the brush *)
-    let slider = jsnew Goog.Ui.slider(Js.null) in
-    slider##setMinimum(1.);
-    slider##setMaximum(80.);
-    slider##setValue(10.);
-    slider##setMoveToPointEnabled(Js._true);
-    slider##render(Js.some Dom_html.document##body);
+         (* Size of the brush *)
+         let slider = jsnew Goog.Ui.slider(Js.null) in
+         slider##setMinimum(1.);
+         slider##setMaximum(80.);
+         slider##setValue(10.);
+         slider##setMoveToPointEnabled(Js._true);
+         slider##render(Js.some Dom_html.document##body);
 
-    (* The color palette: *)
-    let pSmall =
-      jsnew Goog.Ui.hsvPalette(Js.null, Js.null,
-                               Js.some (Js.string "goog-hsv-palette-sm")) in
-    pSmall##render(Js.some Dom_html.document##body);
+         (* The color palette: *)
+         let pSmall =
+           jsnew Goog.Ui.hsvPalette(Js.null, Js.null,
+                                    Js.some (Js.string "goog-hsv-palette-sm")) in
+         pSmall##render(Js.some Dom_html.document##body);
 
-    let x = ref 0 and y = ref 0 in
+         (* Drawing  *)
+         let x = ref 0 and y = ref 0 in
 
-    let set_coord ev =
-      let x0, y0 = Dom_html.elementClientPosition canvas in
-      x := ev##clientX - x0; y := ev##clientY - y0 in
+         let set_coord ev =
+           let x0, y0 = Dom_html.elementClientPosition canvas in
+           x := ev##clientX - x0; y := ev##clientY - y0 in
 
-    let compute_line ev =
-      let oldx = !x and oldy = !y in
-      set_coord ev;
-      let color = Js.to_string (pSmall##getColor()) in
-      let size = int_of_float (Js.to_float (slider##getValue())) in
-      (color, size, (oldx, oldy), (!x, !y))
-    in
+         let compute_line ev =
+           let oldx = !x and oldy = !y in
+           set_coord ev;
+           let color = Js.to_string (pSmall##getColor()) in
+           let size = int_of_float (Js.to_float (slider##getValue())) in
+           (color, size, (oldx, oldy), (!x, !y))
+         in
 
-    let line ev =
-      let v = compute_line ev in
-      let _ = Eliom_bus.write %bus v in
-      draw ctx v;
-      Lwt.return () in
+         let line ev =
+           let v = compute_line ev in
+           let _ = Eliom_bus.write %bus v in
+           draw ctx v;
+           Lwt.return () in
 
-    Lwt.async
-      (fun () ->
-   let open Lwt_js_events in
-   mousedowns canvas
-     (fun ev _ ->
-       set_coord ev; line ev >>= fun () ->
-       Lwt.pick [mousemoves Dom_html.document (fun x _ -> line x);
-                 mouseup Dom_html.document >>= line]));
+         (* A button for downloading the image *)
+         let btnDownload =
+           let text = Goog.Ui.ControlContent.string (Js.string "Download") in
+           jsnew Goog.Ui.button(text, Js.null, Js.null) in
 
-   Lwt.async (fun () -> Lwt_stream.iter (draw ctx) (Eliom_bus.stream %bus))
+         ignore
+           (Goog.Events.listen
+              (Goog.Tools.Union.i1 btnDownload) (Js.string "action")
+              (Js.wrap_callback
+                 (fun _ ->
+                   let le_href = make_uri ~service:%imageservice () in
+                   Dom_html.window##location##href <- Js.string le_href; ))
+              Js.null) ;
+
+         btnDownload##render(Js.some Dom_html.document##body) ;
+
+         Lwt.async
+           (fun () ->
+             let open Lwt_js_events in
+             mousedowns canvas
+               (fun ev _ ->
+                 set_coord ev; line ev >>= fun () ->
+                 Lwt.pick [mousemoves Dom_html.document (fun x _ -> line x);
+                           mouseup Dom_html.document >>= line]));
+
+         Lwt.async (fun () -> Lwt_stream.iter (draw ctx) (Eliom_bus.stream %bus))
 }}
 
 let page =
