@@ -15,9 +15,9 @@ let start_drawing name image canvas =
   }}
 
 let counter = ref 0
-let () = Grafitti_app.register
+let () = Connected.register
   ~service:multigrafitti_service
-  (fun name () ->
+  (fun name () -> Lwt.return (fun username ->
     (* Force image reloading by changing the URL each time *)
     incr counter;
     let image = img ~alt:name
@@ -25,4 +25,7 @@ let () = Grafitti_app.register
     let canvas = canvas ~a:[a_width width; a_height height]
       [pcdata "Your browser doesn't support canvas"; br (); image] in
     start_drawing name image canvas;
-    make_page [h1 [pcdata name]; choose_drawing_from (); canvas])
+    make_page [h1 [pcdata name];
+               disconnect_box ();
+               choose_drawing_from ();
+               canvas]))

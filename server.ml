@@ -6,6 +6,7 @@ module Grafitti_app = Eliom_registration.App (struct
   let application_name = "grafitti"
 end)
 
+
 let rgb_from_string color =             (* color is in format "#rrggbb" *)
   let get_color i =
     (float_of_string ("0x"^(String.sub color (1+2*i) 2))) /. 255. in
@@ -95,8 +96,89 @@ let make_page content =
        (body content))
 
 
-let () = Grafitti_app.register
+let connection_service =
+  Eliom_service.post_coservice' ~post_params:
+    (let open Eliom_parameter in
+     (string "name" ** string "password")) ()
+let disconnection_service = Eliom_service.post_coservice'
+  ~post_params:Eliom_parameter.unit ()
+
+let create_account_service =
+  Eliom_service.post_coservice ~fallback:main_service ~post_params:
+    (let open Eliom_parameter in (string "name" ** string "password")) ()
+
+let username = Eliom_reference.eref
+  ~scope:Eliom_common.default_session_scope None
+
+let users = ref ["user","password";"test","test"]
+
+let check_pwd name pwd =
+   try Lwt.return (List.assoc name !users = pwd) with
+   | Not_found -> Lwt.return false
+
+let () = Eliom_registration.Action.register
+  ~service:create_account_service
+  (fun () (name, pwd) ->
+    users := (name, pwd)::!users;
+    Lwt.return ())
+
+let () = Eliom_registration.Action.register
+  ~service:connection_service
+  (fun () (name, password) ->
+    match_lwt check_pwd name password with
+    | true -> Eliom_reference.set username (Some name)
+    | false -> Lwt.return ())
+
+let () =
+  Eliom_registration.Action.register
+    ~service:disconnection_service
+    (fun () () -> Eliom_state.discard
+      ~scope:Eliom_common.default_session_scope ())
+
+let disconnect_box () =
+  post_form disconnection_service
+    (fun _ -> [fieldset
+                  [string_input ~input_type:`Submit ~value:"Log out" ()]]) ()
+
+let login_name_form service button_text =
+  post_form ~service
+    (fun (name1, name2) ->
+      [fieldset
+          [label ~a:[a_for name1] [pcdata "login: "];
+           string_input ~input_type:`Text ~name:name1 ();
+           br ();
+           label ~a:[a_for name2] [pcdata "password: "];
+           string_input ~input_type:`Password ~name:name2 ();
+           br ();
+           string_input ~input_type:`Submit ~value:button_text ()
+          ]]) ()
+
+
+let default_content () =
+  make_page
+    [h1 [pcdata "Welcome to Multigraffiti"];
+     h2 [pcdata "log in"];
+     login_name_form connection_service "Connect";
+     h2 [pcdata "create account"];
+     login_name_form create_account_service "Create account";]
+
+module Connected_translate =
+struct
+  type page = string -> Grafitti_app.page Lwt.t
+  let translate page =
+    match_lwt Eliom_reference.get username with
+    | None -> default_content ()
+    | Some username -> page username
+end
+
+module Connected =
+  Eliom_registration.Customize (Grafitti_app) (Connected_translate)
+
+let () = Connected.register
   ~service:main_service
   (fun () () ->
-    make_page [h1 [pcdata "Welcome to Multigrafitti"];
-               choose_drawing_from ()])
+    Lwt.return (fun username ->
+      make_page [h1 [pcdata ("Welcome to Multigrafitti " ^ username)];
+                 choose_drawing_from ()]))
+
+
